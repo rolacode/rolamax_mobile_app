@@ -42,8 +42,11 @@ const Saved = () => {
         fetchSaved();
     }, [user]);
 
-    const renderItem = ({ item }: { item: SavedMovie }) => (
-        <TouchableOpacity>
+    const renderItem = ({ item, index }: { item: SavedMovie; index: number }) => (
+        <TouchableOpacity
+            key={`${item.$id || 'movie'}-${item.movie_id}-${index}`}
+            className="mr-4"
+        >
             <Image
                 source={{ uri: item.poster_url }}
                 style={{
@@ -53,20 +56,28 @@ const Saved = () => {
                     marginBottom: 10,
                 }}
             />
-            <Text style={{ color: 'white' }}>{item.title}</Text>
+            <Text className="text-white w-[120px]" numberOfLines={1}>
+                {item.title}
+            </Text>
         </TouchableOpacity>
     );
 
     return (
         <View className="bg-primary flex-1 px-4 py-6">
             <Text className="text-white text-xl font-bold mb-4">Saved Movies</Text>
-            <FlatList
-                data={savedMovies}
-                renderItem={renderItem}
-                keyExtractor={(item, index) => item.$id || `movie-${item.movie_id}-${index}`}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-            />
+
+            {savedMovies.length === 0 ? (
+                <Text className="text-white text-sm">You haven't saved any movies yet.</Text>
+            ) : (
+                <FlatList
+                    data={savedMovies}
+                    renderItem={renderItem}
+                    keyExtractor={(item) => `${item.movie_id}-${item.$id}`}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                />
+
+            )}
         </View>
     );
 };

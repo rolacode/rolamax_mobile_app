@@ -1,4 +1,4 @@
-import { Client, Databases, ID, Query, Account, Models } from 'react-native-appwrite';
+import { Client, Databases, ID, Query, Account, Storage, Models } from 'react-native-appwrite';
 
 export type TrendingMovie = Models.Document & {
     title: string;
@@ -15,15 +15,16 @@ const client = new Client()
     .setEndpoint('https://fra.cloud.appwrite.io/v1')
     .setProject(process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID!);
 
-const database = new Databases(client);
-const account = new Account(client);
+export const database = new Databases(client);
+export const storage = new Storage(client);
+export const account = new Account(client);
 
 // ✅ Auth Methods
 export const createUser = (email: string, password: string, name: string) =>
     account.create(ID.unique(), email, password, name);
 
 export const loginUser = (email: string, password: string) =>
-    account.createSession(email, password);
+    account.createEmailPasswordSession(email, password);
 
 export const getUser = () => account.get();
 

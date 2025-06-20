@@ -56,31 +56,26 @@ export default function Index() {
                         )}
 
                         <>
-
                             <FlatList
                                 horizontal
-
                                 showsHorizontalScrollIndicator={false}
                                 ItemSeparatorComponent={() => <View className="w-4" />}
-
                                 className="mb-4 mt-3"
                                 data={trendingMovies}
-                                renderItem={({item, index }) => (
+                                renderItem={({ item, index }) => (
                                     <TrendingCard movie={item} index={index} />
                                 )}
-                                keyExtractor={(item) => item.movie_id.toString()}
+                                keyExtractor={(_, index) => `trending-${index}`}
                             />
 
-                            <Text className="text-lg text-white font-bold mt-5 mb-3">Latest Movies</Text>
 
+                            <Text className="text-lg text-white font-bold mt-5 mb-3">Latest Movies</Text>
                             <FlatList
                                 data={movies}
                                 renderItem={({ item }) => (
-                                    <MovieCard
-                                        {...item}
-                                    />
+                                    <MovieCard {...item} />
                                 )}
-                                keyExtractor={(item) => item.id.toString()}
+                                keyExtractor={(item) => `latest-${item.id.toString()}`}
                                 numColumns={3}
                                 columnWrapperStyle={{
                                     justifyContent: 'flex-start',
@@ -91,6 +86,7 @@ export default function Index() {
                                 className="mt-2 pb-32"
                                 scrollEnabled={false}
                             />
+
                         </>
                     </View>
                 )}

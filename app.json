@@ -8,6 +8,9 @@
     "scheme": "movies",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "extra": {
+      "EXPO_PUBLIC_MOVIE_API_KEY": "process.env.EXPO_PUBLIC_MOVIE_API_KEY"
+    },
     "ios": {
       "supportsTablet": true
     },
@@ -32,6 +35,13 @@
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
+        }
+      ],
+      [
+        "expo-video",
+        {
+          "supportsBackgroundPlayback": true,
+          "supportsPictureInPicture": true
         }
       ]
     ],
