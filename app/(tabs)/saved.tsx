@@ -1,14 +1,9 @@
-import { View, Text, FlatList, Image, TouchableOpacity } from 'react-native';
+import { View, Text, FlatList, Image, TouchableOpacity, Alert } from 'react-native';
 import React, { useEffect, useState } from 'react';
 import { Client, Databases, Query, Models } from 'react-native-appwrite';
 import { useAuth } from '@/context/AuthContext';
-
-type SavedMovie = Models.Document & {
-    title: string;
-    poster_url: string;
-    movie_id: number;
-    user_id: string;
-};
+import { useRouter } from 'expo-router';
+import { ID } from 'react-native-appwrite';
 
 const DATABASE_ID = process.env.EXPO_PUBLIC_APPWRITE_DATABASE_ID!;
 const COLLECTION_ID = process.env.EXPO_PUBLIC_APPWRITE_COLLECTION_ID!;
@@ -19,8 +14,17 @@ const client = new Client()
 
 const database = new Databases(client);
 
+type SavedMovie = Models.Document & {
+    title: string;
+    poster_url: string;
+    movie_id: number;
+    user_id: string;
+    searchTerm: string;
+};
+
 const Saved = () => {
     const { user } = useAuth();
+    const router = useRouter();
     const [savedMovies, setSavedMovies] = useState<SavedMovie[]>([]);
 
     const fetchSaved = async () => {
@@ -38,14 +42,24 @@ const Saved = () => {
         }
     };
 
+    const handleDelete = async (docId: string) => {
+        try {
+            await database.deleteDocument(DATABASE_ID, COLLECTION_ID, docId);
+            fetchSaved(); // refresh
+        } catch (err: any) {
+            console.error('Error deleting movie:', err.message || err);
+            alert('❌ Failed to delete movie');
+        }
+    };
+
     useEffect(() => {
         fetchSaved();
     }, [user]);
 
-    const renderItem = ({ item, index }: { item: SavedMovie; index: number }) => (
+    const renderItem = ({ item }: { item: SavedMovie }) => (
         <TouchableOpacity
-            key={`${item.$id || 'movie'}-${item.movie_id}-${index}`}
             className="mr-4"
+            onPress={() => router.push(`/movies/${item.movie_id}`)}
         >
             <Image
                 source={{ uri: item.poster_url }}
@@ -59,6 +73,29 @@ const Saved = () => {
             <Text className="text-white w-[120px]" numberOfLines={1}>
                 {item.title}
             </Text>
+
+            <TouchableOpacity
+                onPress={() => router.push(`/movies/${item.movie_id}?autoplay=true`)}
+                className="bg-accent mt-2 py-1 px-2 rounded"
+            >
+                <Text className="text-white text-xs text-center">🎬 Play Trailer</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+                onPress={() =>
+                    Alert.alert(
+                        'Delete Movie',
+                        'Are you sure you want to delete this movie?',
+                        [
+                            { text: 'Cancel', style: 'cancel' },
+                            { text: 'Delete', style: 'destructive', onPress: () => handleDelete(item.$id) },
+                        ]
+                    )
+                }
+                className="bg-red-500 mt-2 py-1 px-2 rounded"
+            >
+                <Text className="text-white text-xs text-center">🗑 Remove</Text>
+            </TouchableOpacity>
         </TouchableOpacity>
     );
 
@@ -76,7 +113,6 @@ const Saved = () => {
                     horizontal
                     showsHorizontalScrollIndicator={false}
                 />
-
             )}
         </View>
     );

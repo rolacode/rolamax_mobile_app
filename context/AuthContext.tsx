@@ -5,7 +5,8 @@ import React, {
     useState,
     ReactNode,
 } from 'react';
-import { Client, Account } from 'react-native-appwrite';
+import { Client, Account, Models } from 'react-native-appwrite';
+import {router} from "expo-router";
 
 const client = new Client()
     .setEndpoint('https://fra.cloud.appwrite.io/v1')
@@ -14,15 +15,17 @@ const client = new Client()
 const account = new Account(client);
 
 interface AuthContextType {
-    user: any;
-    setUser: React.Dispatch<React.SetStateAction<any>>;
-    logout: () => void;
+    user: Models.User<Models.Preferences> | null | undefined;
+    setUser: React.Dispatch<React.SetStateAction<Models.User<Models.Preferences> | null | undefined>>;
+    logout: () => Promise<void>;
+    loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-    const [user, setUser] = useState<any>(undefined);
+    const [user, setUser] = useState<Models.User<Models.Preferences> | null | undefined>(undefined);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const checkUser = async () => {
@@ -30,9 +33,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 const userData = await account.get();
                 setUser(userData);
             } catch (error) {
-                setUser(null); // user not logged in
+                setUser(null); // not logged in
+            } finally {
+                setLoading(false);
             }
         };
+
         checkUser();
     }, []);
 
@@ -40,13 +46,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         try {
             await account.deleteSession('current');
             setUser(null);
+            router.replace('/login'); // ✅ Navigate to login and prevent back navigation
         } catch (error) {
             console.error('Logout error:', error);
         }
     };
 
     return (
-        <AuthContext.Provider value={{ user, setUser, logout }}>
+        <AuthContext.Provider value={{ user, setUser, logout, loading }}>
             {children}
         </AuthContext.Provider>
     );

@@ -78,7 +78,7 @@ const Signup = () => {
             <TouchableOpacity className="bg-button py-3 rounded" onPress={handleSignup}>
                 <Text className="text-center text-primary font-bold">Sign Up</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('//login')} className="mt-4">
+            <TouchableOpacity onPress={() => router.push('/login')} className="mt-4">
                 <Text className="text-white text-center">
                     Already have an account?{'Click Here'}<Text className="text-secondary">Login</Text>
                 </Text>

@@ -1,21 +1,28 @@
 import { View, Text, Image, Button } from 'react-native';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { router } from 'expo-router';
 import { Models } from 'react-native-appwrite';
 
 const Profile = () => {
     const { user, logout } = useAuth();
 
-    // Optional: add loading state
+    useEffect(() => {
+        if (user === null) {
+            // 👇 Redirect to login when not logged in
+            router.replace('/login');
+        }
+    }, [user]);
+
     if (user === undefined) {
         return <Text style={{ color: 'white', padding: 20 }}>Checking session...</Text>;
     }
 
     if (!user) {
-        return <Text style={{ color: 'white', padding: 20 }}>Not logged in.</Text>;
+        return null; // Let redirect handle it
     }
 
-    const appwriteUser = user as Models.User<Models.Preferences>; // ✅ cast safely
+    const appwriteUser = user as Models.User<Models.Preferences>;
 
     return (
         <View className="bg-primary flex-1 items-center justify-center px-6">

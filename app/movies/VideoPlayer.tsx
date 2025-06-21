@@ -21,9 +21,9 @@ export default function VideoScreen({ videoUri }: Props) {
         return () => {
             try {
                 if (player?.pause) player.pause();
-            } catch (error) {
+            } catch (e) {
                 // @ts-ignore
-                console.warn('Video cleanup failed:', error.message);
+                console.warn('Video cleanup failed:', e.message);
             }
         };
     }, []);
@@ -32,7 +32,7 @@ export default function VideoScreen({ videoUri }: Props) {
         <View style={{ alignItems: 'center', marginTop: 50 }}>
             <VideoView
                 player={player}
-                style={{ width: 380, height: 380, backgroundColor: 'black', borderRadius: 12 }}
+                style={{ width: 380, height: 480, backgroundColor: 'black', borderRadius: 12 }}
                 allowsFullscreen
                 allowsPictureInPicture
                 contentFit="cover"

@@ -14,10 +14,8 @@ const COLLECTION_ID = process.env.EXPO_PUBLIC_APPWRITE_COLLECTION_ID!;
 const client = new Client()
     .setEndpoint('https://fra.cloud.appwrite.io/v1')
     .setProject(process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID!);
-
-export const database = new Databases(client);
-export const storage = new Storage(client);
-export const account = new Account(client);
+const database = new Databases(client);
+const account = new Account(client);
 
 // ✅ Auth Methods
 export const createUser = (email: string, password: string, name: string) =>
