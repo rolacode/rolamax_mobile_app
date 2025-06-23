@@ -5,7 +5,8 @@ import {
     ScrollView,
     Image,
     TouchableOpacity,
-    ActivityIndicator,
+    Modal,
+    Pressable,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import YouTubePlayer from '@/components/YouTubePlayer';
@@ -13,12 +14,13 @@ import useFetch from '@/services/useFetch';
 import { fetchMovieDetails } from '@/services/api';
 import { icons } from '@/constants/icons';
 import { useAuth } from '@/context/AuthContext';
-import { saveMovie } from '@/services/saveMovie';
 import { Client, Databases, Query, Models, ID } from 'react-native-appwrite';
 import { Heart, HeartOff } from 'lucide-react-native';
+import * as Linking from 'expo-linking';
 
 const DATABASE_ID = process.env.EXPO_PUBLIC_APPWRITE_DATABASE_ID!;
 const COLLECTION_ID = process.env.EXPO_PUBLIC_APPWRITE_COLLECTION_ID!;
+const COLLECTION1_ID= process.env.EXPO_PUBLIC_APPWRITE_COLLECTION1_ID!;
 
 const client = new Client()
     .setEndpoint('https://fra.cloud.appwrite.io/v1')
@@ -57,6 +59,7 @@ const MovieDetails = () => {
     const [trailerKey, setTrailerKey] = useState<string | null>(null);
     const [isSaved, setIsSaved] = useState(false);
     const [savedDocId, setSavedDocId] = useState<string | null>(null);
+    const [showModal, setShowModal] = useState(false);
 
     useEffect(() => {
         const fetchSavedStatus = async () => {
@@ -140,6 +143,38 @@ const MovieDetails = () => {
         }
     };
 
+    const handleWatchMovie = async () => {
+        if (!movie?.title) return;
+
+        try {
+            await database.createDocument(DATABASE_ID, COLLECTION1_ID, ID.unique(), {
+                user_id: user?.$id,
+                movie_id: movie?.id,
+                title: movie?.title,
+                timestamp: new Date().toISOString(), // ✅ matches your schema
+                poster_url: `https://image.tmdb.org/t/p/w500/${movie.poster_path}`,
+            });
+        } catch (e) {
+            console.error('❌ Failed to log click', e);
+        }
+
+        const query = encodeURIComponent(`${movie.title} full movie`);
+        const youtubeAppUrl = `vnd.youtube://results?search_query=${query}`;
+        const youtubeWebUrl = `https://www.youtube.com/results?search_query=${query}`;
+
+        try {
+            const canOpen = await Linking.canOpenURL(youtubeAppUrl);
+            const finalUrl = canOpen ? youtubeAppUrl : youtubeWebUrl;
+            await Linking.openURL(finalUrl);
+        } catch (err) {
+            console.warn('⚠️ Failed to open YouTube link:', err);
+            alert('Unable to open YouTube. Please check your internet or try again later.');
+        }
+
+        setShowModal(false);
+    };
+
+
     return (
         <View className="bg-primary flex-1">
             <ScrollView ref={scrollRef} contentContainerStyle={{ paddingBottom: 80, paddingTop: 200 }}>
@@ -180,6 +215,15 @@ const MovieDetails = () => {
                         <Text className="text-light-200 text-sm mt-4">No trailer available</Text>
                     )}
 
+                    <TouchableOpacity
+                        onPress={() => setShowModal(true)}
+                        className="bg-green-600 mt-4 py-2 px-4 rounded"
+                    >
+                        <Text className="text-white text-center text-sm font-semibold">
+                            🍿 Watch Full Movie on YouTube
+                        </Text>
+                    </TouchableOpacity>
+
                     <MovieInfo label="Overview" value={movie?.overview} />
                     <MovieInfo
                         label="Genres"
@@ -211,6 +255,33 @@ const MovieDetails = () => {
                     />
                 </View>
             </ScrollView>
+
+            <Modal
+                visible={showModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowModal(false)}
+            >
+                <View className="flex-1 items-center justify-center bg-black/50">
+                    <View className="bg-white p-6 rounded-lg w-4/5">
+                        <Text className="text-black font-semibold text-lg mb-4">
+                            Open YouTube?
+                        </Text>
+                        <Text className="text-gray-700 mb-6">
+                            You're about to open the full movie trailer on YouTube.
+                        </Text>
+
+                        <View className="flex-row justify-end">
+                            <Pressable onPress={() => setShowModal(false)} className="mr-4">
+                                <Text className="text-blue-500 font-bold">Cancel</Text>
+                            </Pressable>
+                            <Pressable onPress={handleWatchMovie}>
+                                <Text className="text-red-500 font-bold">Proceed</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
 
             <TouchableOpacity
                 className="absolute bottom-5 left-0 right-0 mx-5 bg-accent rounded-lg py-3.5 flex-row items-center justify-center z-50"

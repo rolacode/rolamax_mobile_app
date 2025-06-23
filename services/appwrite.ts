@@ -10,6 +10,7 @@ export type TrendingMovie = Models.Document & {
 
 const DATABASE_ID = process.env.EXPO_PUBLIC_APPWRITE_DATABASE_ID!;
 const COLLECTION_ID = process.env.EXPO_PUBLIC_APPWRITE_COLLECTION_ID!;
+const COLLECTION1_ID = process.env.EXPO_PUBLIC_APPWRITE_COLLECTION1_ID!;
 
 const client = new Client()
     .setEndpoint('https://fra.cloud.appwrite.io/v1')

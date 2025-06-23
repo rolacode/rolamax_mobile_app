@@ -9,9 +9,19 @@ import {
     Platform,
     ScrollView,
 } from 'react-native';
+import { Client, Databases, Query } from 'react-native-appwrite';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { loginUser, getUser, logoutUser } from '@/services/appwrite';
+
+const client = new Client()
+    .setEndpoint('https://fra.cloud.appwrite.io/v1')
+    .setProject(process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID!);
+
+const database = new Databases(client);
+
+const DATABASE_ID = process.env.EXPO_PUBLIC_APPWRITE_DATABASE_ID!;
+const COLLECTION1_ID = process.env.EXPO_PUBLIC_APPWRITE_COLLECTION1_ID!;
 
 const Login = () => {
     const router = useRouter();
@@ -42,7 +52,19 @@ const Login = () => {
             const userData = await getUser();
             setUser(userData);
 
-            // ✅ Redirect to home
+            // ✅ Fetch user's click history
+            try {
+                const res = await database.listDocuments(
+                    DATABASE_ID,
+                    COLLECTION1_ID, // your collection ID
+                    [Query.equal('user_id', userData.$id)]
+                );
+                console.log('🎬 Past clicks:', res.documents);
+            } catch (e) {
+                console.warn('⚠️ Error fetching click history:', e);
+            }
+
+            // ✅ Navigate to homepage after login
             router.replace('/');
         } catch (err: any) {
             Alert.alert('Login Failed', err.message || 'Something went wrong');
@@ -50,6 +72,7 @@ const Login = () => {
             setLoading(false);
         }
     };
+
 
     return (
         <KeyboardAvoidingView

@@ -1,13 +1,14 @@
-import {ScrollView, Image, View, ActivityIndicator, Text, FlatList} from "react-native";
+import {ScrollView, Image, View, ActivityIndicator, Text, FlatList, TouchableOpacity} from "react-native";
 import {images} from "@/constants/images";
 import {icons} from "@/constants/icons";
 import SearchBar from "@/components/SearchBar";
-import { useRouter} from "expo-router";
+import {router, useRouter} from "expo-router";
 import {fetchMovies} from "@/services/api";
 import useFetch from "@/services/useFetch";
 import MovieCard from "@/components/MovieCard";
 import {getTrendingMovies} from "@/services/appwrite";
 import TrendingCard from "@/components/TrendingCard";
+import React from "react";
 
 export default function Index() {
     const router = useRouter();
@@ -34,6 +35,11 @@ export default function Index() {
 
             <ScrollView className="flex-1 px-5" showsVerticalScrollIndicator={false} contentContainerStyle={{ minHeight: "100%", paddingBottom: 10 }}>
                 <Image source={icons.logo} className="w-12 h-10 mt-20 mb-5 mx-auto" />
+
+                <TouchableOpacity onPress={() => router.push('/history')}>
+                    <Text className="text-secondary text-center justify-center text-md mb-5 py-3 px-5 rounded-full font-semibold bg-amber-300">View Watched History</Text>
+                </TouchableOpacity>
+
 
                 {moviesLoading || trendingLoading ? (
                     <ActivityIndicator
