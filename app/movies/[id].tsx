@@ -7,20 +7,21 @@ import {
     TouchableOpacity,
     Modal,
     Pressable,
+    ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import YouTubePlayer from '@/components/YouTubePlayer';
+import YoutubePlayerComponent from '@/components/YouTubePlayer';
 import useFetch from '@/services/useFetch';
 import { fetchMovieDetails } from '@/services/api';
 import { icons } from '@/constants/icons';
 import { useAuth } from '@/context/AuthContext';
-import { Client, Databases, Query, Models, ID } from 'react-native-appwrite';
+import { Client, Databases, Query, ID } from 'react-native-appwrite';
 import { Heart, HeartOff } from 'lucide-react-native';
-import * as Linking from 'expo-linking';
+import { scrapeBestYouTubeId } from '@/services/scrapeYouTubeId';
 
 const DATABASE_ID = process.env.EXPO_PUBLIC_APPWRITE_DATABASE_ID!;
 const COLLECTION_ID = process.env.EXPO_PUBLIC_APPWRITE_COLLECTION_ID!;
-const COLLECTION1_ID= process.env.EXPO_PUBLIC_APPWRITE_COLLECTION1_ID!;
+const COLLECTION1_ID = process.env.EXPO_PUBLIC_APPWRITE_COLLECTION1_ID!;
 
 const client = new Client()
     .setEndpoint('https://fra.cloud.appwrite.io/v1')
@@ -28,44 +29,23 @@ const client = new Client()
 
 const database = new Databases(client);
 
-type SavedMovie = Models.Document & {
-    title: string;
-    poster_url: string;
-    movie_id: number;
-    user_id: string;
-    searchTerm: string;
-};
-
-interface MovieInfoProps {
-    label: string;
-    value?: string | number | null;
-}
-
-const MovieInfo = ({ label, value }: MovieInfoProps) => (
-    <View className="flex-col items-start justify-center mt-5">
-        <Text className="text-light-200 font-normal text-sm">{label}</Text>
-        <Text className="text-light-100 font-bold text-sm mt-2">{value || 'N/A'}</Text>
-    </View>
-);
-
 const MovieDetails = () => {
     const { id, autoplay } = useLocalSearchParams<{ id: string; autoplay?: string }>();
     const scrollViewRef = useRef<ScrollView>(null);
     const trailerRef = useRef<View>(null);
-    const scrollRef = useRef<ScrollView>(null);
-
     const { user } = useAuth();
     const { data: movie, loading } = useFetch(() => fetchMovieDetails(id as string));
     const [trailerKey, setTrailerKey] = useState<string | null>(null);
     const [isSaved, setIsSaved] = useState(false);
     const [savedDocId, setSavedDocId] = useState<string | null>(null);
     const [showModal, setShowModal] = useState(false);
+    const [loadingScrape, setLoadingScrape] = useState(false);
 
     useEffect(() => {
         const fetchSavedStatus = async () => {
             if (!user?.$id || !movie) return;
             try {
-                const res: Models.DocumentList<SavedMovie> = await database.listDocuments(
+                const res = await database.listDocuments(
                     DATABASE_ID,
                     COLLECTION_ID,
                     [
@@ -147,37 +127,32 @@ const MovieDetails = () => {
         if (!movie?.title) return;
 
         try {
-            await database.createDocument(DATABASE_ID, COLLECTION1_ID, ID.unique(), {
-                user_id: user?.$id,
-                movie_id: movie?.id,
-                title: movie?.title,
-                timestamp: new Date().toISOString(), // ✅ matches your schema
-                poster_url: `https://image.tmdb.org/t/p/w500/${movie.poster_path}`,
-            });
+            setLoadingScrape(true);
+            const bestVideoId = await scrapeBestYouTubeId(`${movie.title} ${movie.release_date?.split('-')[0] || ''}`);
+            setLoadingScrape(false);
+
+            if (bestVideoId) {
+                await database.createDocument(DATABASE_ID, COLLECTION1_ID, ID.unique(), {
+                    user_id: user?.$id,
+                    movie_id: movie?.id,
+                    title: movie?.title,
+                    timestamp: new Date().toISOString(),
+                    poster_url: `https://image.tmdb.org/t/p/w500/${movie.poster_path}`,
+                });
+
+                router.push({ pathname: '/YouTubePlayer', params: { videoId: bestVideoId } });
+            } else {
+                alert('No full movie found. Try again later.');
+            }
         } catch (e) {
-            console.error('❌ Failed to log click', e);
+            console.error('❌ Failed to scrape or route:', e);
+            setLoadingScrape(false);
         }
-
-        const query = encodeURIComponent(`${movie.title} full movie`);
-        const youtubeAppUrl = `vnd.youtube://results?search_query=${query}`;
-        const youtubeWebUrl = `https://www.youtube.com/results?search_query=${query}`;
-
-        try {
-            const canOpen = await Linking.canOpenURL(youtubeAppUrl);
-            const finalUrl = canOpen ? youtubeAppUrl : youtubeWebUrl;
-            await Linking.openURL(finalUrl);
-        } catch (err) {
-            console.warn('⚠️ Failed to open YouTube link:', err);
-            alert('Unable to open YouTube. Please check your internet or try again later.');
-        }
-
-        setShowModal(false);
     };
-
 
     return (
         <View className="bg-primary flex-1">
-            <ScrollView ref={scrollRef} contentContainerStyle={{ paddingBottom: 80, paddingTop: 200 }}>
+            <ScrollView ref={scrollViewRef} contentContainerStyle={{ paddingBottom: 80, paddingTop: 200 }}>
                 <View className="px-5">
                     <TouchableOpacity
                         onPress={handleToggleSave}
@@ -209,18 +184,19 @@ const MovieDetails = () => {
 
                     {trailerKey ? (
                         <View ref={trailerRef} className="mt-6">
-                            <YouTubePlayer videoId={trailerKey} />
+                            <YoutubePlayerComponent videoId={trailerKey} />
                         </View>
                     ) : (
                         <Text className="text-light-200 text-sm mt-4">No trailer available</Text>
                     )}
 
                     <TouchableOpacity
-                        onPress={() => setShowModal(true)}
+                        onPress={handleWatchMovie}
+                        disabled={loadingScrape}
                         className="bg-green-600 mt-4 py-2 px-4 rounded"
                     >
                         <Text className="text-white text-center text-sm font-semibold">
-                            🍿 Watch Full Movie on YouTube
+                            {loadingScrape ? '⏳ Searching Full Movie...' : '🍿 Watch Full Movie on YouTube'}
                         </Text>
                     </TouchableOpacity>
 
@@ -265,10 +241,10 @@ const MovieDetails = () => {
                 <View className="flex-1 items-center justify-center bg-black/50">
                     <View className="bg-white p-6 rounded-lg w-4/5">
                         <Text className="text-black font-semibold text-lg mb-4">
-                            Open YouTube?
+                            Watch in App?
                         </Text>
                         <Text className="text-gray-700 mb-6">
-                            You're about to open the full movie trailer on YouTube.
+                            Would you like to play the full movie here in the app?
                         </Text>
 
                         <View className="flex-row justify-end">
@@ -276,7 +252,7 @@ const MovieDetails = () => {
                                 <Text className="text-blue-500 font-bold">Cancel</Text>
                             </Pressable>
                             <Pressable onPress={handleWatchMovie}>
-                                <Text className="text-red-500 font-bold">Proceed</Text>
+                                <Text className="text-green-600 font-bold">Yes, Play</Text>
                             </Pressable>
                         </View>
                     </View>
@@ -297,5 +273,12 @@ const MovieDetails = () => {
         </View>
     );
 };
+
+const MovieInfo = ({ label, value }: { label: string; value?: string | number | null }) => (
+    <View className="flex-col items-start justify-center mt-5">
+        <Text className="text-light-200 font-normal text-sm">{label}</Text>
+        <Text className="text-light-100 font-bold text-sm mt-2">{value || 'N/A'}</Text>
+    </View>
+);
 
 export default MovieDetails;

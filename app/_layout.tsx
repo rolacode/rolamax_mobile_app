@@ -29,6 +29,7 @@ export default function RootLayout() {
                     <Stack.Screen name="(tabs)" />
                     <Stack.Screen name="movies/[id]" />
                     <Stack.Screen name="history" />
+                    <Stack.Screen name="reset-password" />
                 </Stack>
             </AuthProvider>
         </GestureHandlerRootView>

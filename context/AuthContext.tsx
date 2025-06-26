@@ -5,7 +5,7 @@ import React, {
     useState,
     ReactNode,
 } from 'react';
-import { Client, Account, Models, Storage, ID } from 'react-native-appwrite';
+import { Client, Account, Models } from 'react-native-appwrite';
 import { router } from 'expo-router';
 
 const client = new Client()
@@ -13,9 +13,6 @@ const client = new Client()
     .setProject(process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID!);
 
 const account = new Account(client);
-const storage = new Storage(client);
-
-const BUCKET_ID = process.env.EXPO_PUBLIC_APPWRITE_BUCKET_ID!;
 
 interface ClickDoc extends Models.Document {
     title: string;
@@ -71,23 +68,35 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const updateProfileImage = async (uri: string) => {
         try {
-            const res = await fetch(uri);
-            const blob = await res.blob();
+            const formData = new FormData();
+            formData.append('file', {
+                uri,
+                name: 'profile.jpg',
+                type: 'image/jpeg',
+            } as any);
+            formData.append('upload_preset', 'rola-images');
 
-            const uploaded = await storage.createFile(BUCKET_ID, ID.unique(), blob as any);
+            const res = await fetch('https://api.cloudinary.com/v1_1/dnbpsnmyo/image/upload', {
+                method: 'POST',
+                body: formData,
+            });
 
-            const fileUrl = storage.getFileView(BUCKET_ID, uploaded.$id).toString();
+            const data = await res.json();
 
-            await account.updatePrefs({ profileImage: fileUrl });
+            if (!data.secure_url) throw new Error('Upload failed');
+
+            await account.updatePrefs({ profileImage: data.secure_url });
 
             const updatedUser = await account.get();
             setUser(updatedUser);
-            setProfileImageUrl(fileUrl);
+            setProfileImageUrl(data.secure_url);
         } catch (error) {
-            console.error('Error updating profile image:', error);
+            console.error('Error uploading image:', error);
             throw error;
         }
     };
+
+
 
     return (
         <AuthContext.Provider

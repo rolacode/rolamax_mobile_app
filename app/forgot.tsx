@@ -1,12 +1,29 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Alert } from 'react-native';
-import { useRouter } from 'expo-router'
+import { useRouter } from 'expo-router';
+import { Account, Client } from 'react-native-appwrite';
+
+const client = new Client()
+    .setEndpoint('https://fra.cloud.appwrite.io/v1')
+    .setProject(process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID!);
+
+const account = new Account(client);
 
 const ForgotPassword = () => {
     const router = useRouter();
     const [email, setEmail] = useState('');
 
+    const sendPasswordResetEmail = async (email: string) => {
+        const resetUrl = 'rolamax://reset-password'; // 👈 Deep link for your app
+        await account.createRecovery(email, resetUrl);
+    };
+
     const handleReset = async () => {
+        if (!email.includes('@')) {
+            Alert.alert('Invalid Email', 'Please enter a valid email address.');
+            return;
+        }
+
         try {
             await sendPasswordResetEmail(email);
             Alert.alert('Success', 'Password reset link sent to your email.');
@@ -35,7 +52,3 @@ const ForgotPassword = () => {
 };
 
 export default ForgotPassword;
-function sendPasswordResetEmail(email: string) {
-    throw new Error('Function not implemented.');
-}
-

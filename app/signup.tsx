@@ -6,7 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 
 const client = new Client()
     .setEndpoint('https://fra.cloud.appwrite.io/v1')
-    .setProject(process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID!); // Make sure this is set correctly in .env
+    .setProject(process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID!); // Make sure this is set correctly in .env.local
 
 const account = new Account(client);
 

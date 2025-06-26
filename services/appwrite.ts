@@ -74,3 +74,5 @@ export const getTrendingMovies = async (): Promise<TrendingMovie[] | undefined> 
         return undefined;
     }
 };
+
+export { account };

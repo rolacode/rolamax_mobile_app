@@ -1,26 +1,28 @@
 import React from 'react';
-import { View, ActivityIndicator } from 'react-native';
-import { WebView } from 'react-native-webview';
+import { View, StyleSheet, Dimensions } from 'react-native';
+import YoutubePlayer from 'react-native-youtube-iframe';
 
-interface Props {
-    videoId: string;
-}
-
-const YouTubePlayer = ({ videoId }: Props) => {
-    const url = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+const YoutubePlayerComponent = ({ videoId }: { videoId: string }) => {
+    const screenWidth = Dimensions.get('window').width;
+    const screenHeight = Dimensions.get('window').height;
 
     return (
-        <View style={{ width: '100%', height: 420, borderRadius: 12, overflow: 'hidden' }}>
-            <WebView
-                source={{ uri: url }}
-                style={{ flex: 1 }}
-                javaScriptEnabled
-                allowsFullscreenVideo
-                startInLoadingState
-                renderLoading={() => <ActivityIndicator size="large" color="#fff" />}
+        <View style={styles.container}>
+            <YoutubePlayer
+                height={screenHeight}
+                width={screenWidth}
+                videoId={videoId}
+                play
             />
         </View>
     );
 };
 
-export default YouTubePlayer;
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: '#000',
+    },
+});
+
+export default YoutubePlayerComponent;
