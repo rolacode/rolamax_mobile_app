@@ -38,6 +38,7 @@ const ForgotPassword = () => {
             <Text className="text-white text-2xl font-bold mb-6">Reset Password</Text>
             <TextInput
                 placeholder="Enter your email"
+                placeholderTextColor="#000"
                 className="bg-white rounded p-3 mb-6"
                 keyboardType="email-address"
                 autoCapitalize="none"

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, Alert } from 'react-native';
+import {View, Text, Alert, FlatList} from 'react-native';
 import { Client, Databases, Query, Models } from 'react-native-appwrite';
 import { useAuth } from '@/context/AuthContext';
 import SwipeableMovieItem from '@/components/SwipeableMovieItem';
@@ -76,9 +76,15 @@ export default function Saved() {
         <View className="bg-primary flex-1 px-4 py-6">
             <Text className="text-white text-xl font-bold mb-4">Saved Movies</Text>
 
-            {savedMovies.map((item) => (
-                <SwipeableMovieItem key={item.$id} item={item} onDelete={handleDelete} />
-            ))}
+            <FlatList
+                data={savedMovies}
+                keyExtractor={(item) => item.$id}
+                renderItem={({ item }) => (
+                    <SwipeableMovieItem item={item} onDelete={handleDelete} />
+                )}
+                contentContainerStyle={{ paddingBottom: 100 }}
+                showsVerticalScrollIndicator={false}
+            />
 
             {showUndo && deletedItem && (
                 <View className="absolute top-1 left-4 right-4 bg-dark-100 p-3 rounded-xl flex-row justify-between items-center">
@@ -90,4 +96,5 @@ export default function Saved() {
             )}
         </View>
     );
+
 }

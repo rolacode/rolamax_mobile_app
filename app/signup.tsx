@@ -57,12 +57,14 @@ const Signup = () => {
             <Text className="text-white text-2xl font-bold mb-6">Sign Up</Text>
             <TextInput
                 placeholder="Name"
+                placeholderTextColor="#000"
                 className="bg-white rounded p-3 mb-4"
                 value={name}
                 onChangeText={setName}
             />
             <TextInput
                 placeholder="Email"
+                placeholderTextColor="#000"
                 className="bg-white rounded p-3 mb-4"
                 autoCapitalize="none"
                 value={email}
@@ -70,6 +72,7 @@ const Signup = () => {
             />
             <TextInput
                 placeholder="Password"
+                placeholderTextColor="#000"
                 className="bg-white rounded p-3 mb-6"
                 secureTextEntry
                 value={password}

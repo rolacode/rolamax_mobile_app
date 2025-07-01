@@ -81,11 +81,11 @@ const Login = () => {
         >
             <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
                 <View className="px-6">
-                    <Text className="text-white text-3xl font-bold mb-8 text-center">Welcome Back</Text>
+                    <Text className="text-white text-2xl font-bold mb-8 text-center">Welcome Back</Text>
 
                     <TextInput
                         placeholder="Email"
-                        placeholderTextColor="#999"
+                        placeholderTextColor="#000"
                         className="bg-white rounded-lg px-4 py-3 mb-4"
                         autoCapitalize="none"
                         keyboardType="email-address"
@@ -94,7 +94,7 @@ const Login = () => {
                     />
                     <TextInput
                         placeholder="Password"
-                        placeholderTextColor="#999"
+                        placeholderTextColor="#000"
                         className="bg-white rounded-lg px-4 py-3 mb-6"
                         secureTextEntry
                         value={password}
