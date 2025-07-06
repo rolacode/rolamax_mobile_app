@@ -1,3 +1,4 @@
+// src/context/AuthContext.tsx
 import React, {
     createContext,
     useContext,
@@ -5,68 +6,125 @@ import React, {
     useState,
     ReactNode,
 } from 'react';
-import { Client, Account, Models } from 'react-native-appwrite';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
+import { Alert } from 'react-native';
 
-const client = new Client()
-    .setEndpoint('https://fra.cloud.appwrite.io/v1')
-    .setProject(process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID!);
+interface UserData {
+    _id: string;
+    email: string;
+    name?: string;
+    image?: string;
+}
 
-const account = new Account(client);
-
-interface ClickDoc extends Models.Document {
-    title: string;
-    user_id: string;
+interface ClickDoc {
+    _id: string;
+    user: string;
     movie_id: number;
+    title: string;
     timestamp: string;
     poster_url?: string;
 }
 
 interface AuthContextType {
-    user: Models.User<Models.Preferences> | null | undefined;
-    setUser: React.Dispatch<React.SetStateAction<Models.User<Models.Preferences> | null | undefined>>;
+    user: UserData | null;
+    token: string | null;
+    setUser: React.Dispatch<React.SetStateAction<UserData | null>>;
+    setToken: React.Dispatch<React.SetStateAction<string | null>>;
     logout: () => Promise<void>;
     loading: boolean;
     userClicks: ClickDoc[];
     setUserClicks: React.Dispatch<React.SetStateAction<ClickDoc[]>>;
-    profileImageUrl: string | null;
+    profileImageUrl: string | null; // ✅ Required in type
+    setProfileImageUrl: React.Dispatch<React.SetStateAction<string | null>>;
     updateProfileImage: (uri: string) => Promise<void>;
 }
+
+const BACKEND_URL = 'http://192.168.132.114:5000/api';
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-    const [user, setUser] = useState<Models.User<Models.Preferences> | null | undefined>(undefined);
+    const [user, setUser] = useState<UserData | null>(null);
+    const [token, setToken] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [userClicks, setUserClicks] = useState<ClickDoc[]>([]);
-    const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
+    const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null); // ✅ Add this back
 
     useEffect(() => {
-        const checkUser = async () => {
+        const checkUserSession = async () => {
             try {
-                const userData = await account.get();
-                setUser(userData);
-                setProfileImageUrl(userData.prefs?.profileImage || null);
-            } catch {
+                const storedToken = await AsyncStorage.getItem('userToken');
+
+                if (storedToken) {
+                    const response = await fetch(`${BACKEND_URL}/user/me`, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${storedToken}`,
+                            'Content-Type': 'application/json',
+                        },
+                    });
+
+                    if (response.ok) {
+                        const userData = await response.json();
+                        const currentUserData: UserData = userData.user || userData;
+
+                        if (!currentUserData._id && (currentUserData as any).id) {
+                            currentUserData._id = (currentUserData as any).id;
+                        }
+
+                        setUser(currentUserData);
+                        setToken(storedToken);
+                        setProfileImageUrl(currentUserData.image || null); // ✅ Set image
+                    } else {
+                        await AsyncStorage.removeItem('userToken');
+                        setUser(null);
+                        setToken(null);
+                        setProfileImageUrl(null);
+                        console.warn('Invalid or expired token, clearing session.');
+                    }
+                } else {
+                    setUser(null);
+                    setToken(null);
+                    setProfileImageUrl(null);
+                }
+            } catch (error) {
+                console.error('Error checking user session:', error);
                 setUser(null);
+                setToken(null);
+                setProfileImageUrl(null);
             } finally {
                 setLoading(false);
             }
         };
-        checkUser();
+
+        checkUserSession();
     }, []);
 
     const logout = async () => {
         try {
-            await account.deleteSession('current');
+            await AsyncStorage.removeItem('userToken');
             setUser(null);
+            setToken(null);
+            setProfileImageUrl(null); // ✅ Clear image
             router.replace('/login');
         } catch (error) {
             console.error('Logout error:', error);
+            Alert.alert('Logout Failed', 'Could not log out. Please try again.');
         }
     };
 
     const updateProfileImage = async (uri: string) => {
+        if (!user || !user._id || !token) {
+            Alert.alert('Error', 'You must be logged in to update profile image.');
+            return;
+        }
+
+        if (!uri) {
+            Alert.alert('Error', 'No image selected.');
+            return;
+        }
+
         try {
             const formData = new FormData();
             formData.append('file', {
@@ -76,38 +134,57 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             } as any);
             formData.append('upload_preset', 'rola-images');
 
-            const res = await fetch('https://api.cloudinary.com/v1_1/dnbpsnmyo/image/upload', {
+            const cloudinaryRes = await fetch('https://api.cloudinary.com/v1_1/dnbpsnmyo/image/upload', {
                 method: 'POST',
                 body: formData,
             });
 
-            const data = await res.json();
+            const cloudinaryData = await cloudinaryRes.json();
 
-            if (!data.secure_url) throw new Error('Upload failed');
+            if (!cloudinaryData.secure_url) {
+                throw new Error('Cloudinary upload failed: ' + (cloudinaryData.error?.message || 'Unknown error'));
+            }
 
-            await account.updatePrefs({ profileImage: data.secure_url });
+            const imageUrl = cloudinaryData.secure_url;
 
-            const updatedUser = await account.get();
-            setUser(updatedUser);
-            setProfileImageUrl(data.secure_url);
-        } catch (error) {
-            console.error('Error uploading image:', error);
+            const backendRes = await fetch(`${BACKEND_URL}/user/profile-image`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({ image: imageUrl }),
+            });
+
+            const backendData = await backendRes.json();
+
+            if (backendRes.ok) {
+                setUser(prevUser => (prevUser ? { ...prevUser, image: imageUrl } : null));
+                setProfileImageUrl(imageUrl); // ✅ Set in context
+                Alert.alert('✅ Success', backendData.message || 'Profile image updated.');
+            } else {
+                throw new Error(backendData.message || 'Failed to update profile image on backend.');
+            }
+        } catch (error: any) {
+            console.error('Error updating profile image:', error);
+            Alert.alert('Error', error.message || 'Could not update profile image.');
             throw error;
         }
     };
-
-
 
     return (
         <AuthContext.Provider
             value={{
                 user,
+                token,
                 setUser,
+                setToken,
                 logout,
                 loading,
                 userClicks,
                 setUserClicks,
-                profileImageUrl,
+                profileImageUrl, // ✅ Include this
+                setProfileImageUrl,
                 updateProfileImage,
             }}
         >

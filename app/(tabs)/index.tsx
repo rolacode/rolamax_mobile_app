@@ -6,7 +6,7 @@ import {router, useRouter} from "expo-router";
 import {fetchMovies} from "@/services/api";
 import useFetch from "@/services/useFetch";
 import MovieCard from "@/components/MovieCard";
-import {getTrendingMovies} from "@/services/appwrite";
+import {getTrendingMovies} from "@/services/movie";
 import TrendingCard from "@/components/TrendingCard";
 import React from "react";
 
@@ -86,7 +86,7 @@ export default function Index() {
                                 numColumns={3}
                                 columnWrapperStyle={{
                                     justifyContent: 'flex-start',
-                                    gap: 20,
+                                    gap: 30,
                                     paddingRight: 5,
                                     marginBottom: 10
                                 }}

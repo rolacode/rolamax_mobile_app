@@ -7,7 +7,7 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_APPWRITE_PROJECT_ID": "683f94e989frs435290f45y"
+        "EXPO_PUBLIC_MOVIE_API_KEY": "1abeecb7b374ba1d08cf3d266baff1ee"
       }
     },
     "development": {

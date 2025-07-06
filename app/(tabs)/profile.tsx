@@ -6,34 +6,14 @@ import {
     TouchableOpacity,
     Alert,
     ActivityIndicator,
+    TextInput,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'expo-router';
-import { TextInput } from 'react-native';
-import { Databases, Query, Client, Account } from 'react-native-appwrite';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// ✅ Setup Appwrite Client and Database
-const client = new Client()
-    .setEndpoint('https://fra.cloud.appwrite.io/v1')
-    .setProject(process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID!);
-
-const database = new Databases(client);
-const account = new Account(client);
-
-// ✅ Environment Vars
-const DATABASE_ID = process.env.EXPO_PUBLIC_APPWRITE_DATABASE_ID!;
-const COLLECTION_ID = process.env.EXPO_PUBLIC_APPWRITE_COLLECTION_ID!;
-const COLLECTION1_ID = process.env.EXPO_PUBLIC_APPWRITE_COLLECTION1_ID!;
-
-// ✅ Optional type if needed
-// type SavedMovie = Models.Document & {
-//     title: string;
-//     poster_url: string;
-//     movie_id: number;
-//     user_id: string;
-//     searchTerm: string;
-// };
+const BACKEND_URL = 'http://192.168.132.114:5000/api';
 
 export default function ProfileScreen() {
     const { user, setUser, logout, updateProfileImage, profileImageUrl } = useAuth();
@@ -47,46 +27,71 @@ export default function ProfileScreen() {
     const [saving, setSaving] = useState(false);
     const [showForm, setShowForm] = useState(false);
 
-    // ✅ Fetch saved/history count
     useEffect(() => {
-        if (!user?.$id) return;
-
         const fetchCounts = async () => {
+            if (!user?._id) return;
+
             try {
-                const saved = await database.listDocuments(DATABASE_ID, COLLECTION_ID, [
-                    Query.equal('user_id', user.$id),
-                ]);
-                const history = await database.listDocuments(DATABASE_ID, COLLECTION1_ID, [
-                    Query.equal('user_id', user.$id),
-                ]);
-                setSavedCount(saved.total);
-                setHistoryCount(history.total);
-            } catch (err) {
-                console.error('Error loading counts', err);
+                const token = await AsyncStorage.getItem('userToken');
+                if (!token) return;
+
+                const savedRes = await fetch(`${BACKEND_URL}/savedMovie/saved/count`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (savedRes.ok) {
+                    const data = await savedRes.json();
+                    setSavedCount(data.count);
+                }
+
+                const historyRes = await fetch(`${BACKEND_URL}/search/search-history/count`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (historyRes.ok) {
+                    const data = await historyRes.json();
+                    setHistoryCount(data.count);
+                }
+            } catch (err: any) {
+                console.error('Error loading counts:', err.message || err);
             }
         };
 
         fetchCounts();
     }, [user]);
 
-    // ✅ Image Picker logic
+    useEffect(() => {
+        if (user) {
+            setNewName(user.name || '');
+            setNewEmail(user.email || '');
+        }
+    }, [user]);
+
     const pickAndUploadImage = async () => {
         try {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission required', 'Please grant media library access to upload a profile picture.');
+                return;
+            }
+
             const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                mediaTypes: ImagePicker.MediaTypeOptions.Images, // ✅ This works
                 allowsEditing: true,
                 aspect: [1, 1],
                 quality: 0.7,
             });
 
+
             if (!result.canceled && result.assets?.length) {
                 const uri = result.assets[0].uri;
+                if (!uri) {
+                    Alert.alert('No Image', 'Image URI is invalid or empty.');
+                    return;
+                }
                 setUploading(true);
-                await updateProfileImage(uri); // ✅ uploads to Cloudinary
-                Alert.alert('✅ Success', 'Profile image updated!');
+                await updateProfileImage(uri);
             }
         } catch (error) {
-            Alert.alert('❌ Error', 'Failed to upload image');
+            Alert.alert('❌ Error', 'Failed to pick or upload image');
             console.error(error);
         } finally {
             setUploading(false);
@@ -94,26 +99,72 @@ export default function ProfileScreen() {
     };
 
     const handleSave = async () => {
+        if (!user?._id) {
+            Alert.alert('Error', 'User not logged in.');
+            return;
+        }
+
+        setSaving(true);
         try {
-            setSaving(true);
-            if (newName && newName !== user?.name) {
-                await account.updateName(newName);
+            const token = await AsyncStorage.getItem('userToken');
+            if (!token) {
+                Alert.alert('Error', 'Authentication token missing.');
+                setSaving(false);
+                return;
             }
-            if (newEmail && newEmail !== user?.email && currentPassword) {
-                await account.updateEmail(newEmail, currentPassword);
+
+            const body: { name?: string; email?: string; currentPassword?: string } = {};
+            let needsUpdate = false;
+
+            if (newName.trim() !== user.name) {
+                body.name = newName.trim();
+                needsUpdate = true;
             }
-            const updatedUser = await account.get();
-            setUser(updatedUser);
-            Alert.alert('✅ Profile updated');
-        } catch (error) {
+
+            if (newEmail.trim() !== user.email) {
+                if (!currentPassword.trim()) {
+                    Alert.alert('Error', 'Current password is required to change email.');
+                    setSaving(false);
+                    return;
+                }
+                body.email = newEmail.trim();
+                body.currentPassword = currentPassword.trim();
+                needsUpdate = true;
+            }
+
+            if (!needsUpdate) {
+                Alert.alert('Info', 'No changes to save.');
+                setSaving(false);
+                setShowForm(false);
+                return;
+            }
+
+            const response = await fetch(`${BACKEND_URL}/user/profile`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify(body),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                setUser(data.user);
+                Alert.alert('✅ Profile updated', data.message || 'Profile updated successfully!');
+                setCurrentPassword('');
+                setShowForm(false);
+            } else {
+                Alert.alert('❌ Update failed', data.message || 'Something went wrong while updating.');
+            }
+        } catch (error: any) {
             console.error('Error updating profile info:', error);
-            // @ts-ignore
-            Alert.alert('❌ Update failed', error.message || 'Something went wrong');
+            Alert.alert('❌ Update failed', 'Network error or an unexpected issue occurred.');
         } finally {
             setSaving(false);
         }
     };
-
 
     return (
         <View className="flex-1 bg-primary px-6 py-10 items-center">
@@ -124,6 +175,7 @@ export default function ProfileScreen() {
                     <Image
                         source={{
                             uri:
+                                user?.image ||
                                 profileImageUrl ||
                                 `https://ui-avatars.com/api/?name=${user?.name || 'User'}`,
                         }}
@@ -159,36 +211,33 @@ export default function ProfileScreen() {
                 </TouchableOpacity>
 
                 {showForm && (
-                    <View className="gat-4">
+                    <View className="gap-4">
                         <TextInput
                             value={newName}
                             onChangeText={setNewName}
                             placeholder="Edit Your Name"
-                            className="bg-secondary text-white px-4 py-3 rounded-lg"
+                            className="bg-secondary text-white px-4 py-3 rounded-lg my-2"
                             placeholderTextColor="#aaa"
                         />
-
                         <TextInput
                             value={newEmail}
                             onChangeText={setNewEmail}
                             placeholder="Edit Your Email"
                             keyboardType="email-address"
                             autoCapitalize="none"
-                            className="bg-secondary text-white px-4 py-3 rounded-lg"
+                            className="bg-secondary text-white px-4 py-3 rounded-lg my-2"
                             placeholderTextColor="#aaa"
                         />
-
-                        {newEmail !== user?.email && (
+                        {newEmail.trim() !== user?.email && (
                             <TextInput
                                 value={currentPassword}
                                 onChangeText={setCurrentPassword}
                                 placeholder="Current Password"
                                 secureTextEntry
-                                className="bg-secondary text-white px-4 py-3 rounded-lg"
+                                className="bg-secondary text-white px-4 py-3 rounded-lg my-2"
                                 placeholderTextColor="#aaa"
                             />
                         )}
-
                         <TouchableOpacity
                             onPress={handleSave}
                             className="bg-accent py-3 rounded-lg mt-2"

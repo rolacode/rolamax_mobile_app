@@ -8,6 +8,7 @@ import {
     Modal,
     Pressable,
     ActivityIndicator,
+    Alert,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import YoutubePlayerComponent from '@/components/YouTubePlayer';
@@ -15,26 +16,40 @@ import useFetch from '@/services/useFetch';
 import { fetchMovieDetails } from '@/services/api';
 import { icons } from '@/constants/icons';
 import { useAuth } from '@/context/AuthContext';
-import { Client, Databases, Query, ID } from 'react-native-appwrite';
+
+import {
+    saveMovie,
+    deleteSavedMovie,
+    getSavedMovies,
+} from '@/services/saveMovie';
+
+import { logSearchHistory } from '@/services/searchHistoryService';
+
 import { Heart, HeartOff } from 'lucide-react-native';
 import { scrapeBestYouTubeId } from '@/services/scrapeYouTubeId';
 
-const DATABASE_ID = process.env.EXPO_PUBLIC_APPWRITE_DATABASE_ID!;
-const COLLECTION_ID = process.env.EXPO_PUBLIC_APPWRITE_COLLECTION_ID!;
-const COLLECTION1_ID = process.env.EXPO_PUBLIC_APPWRITE_COLLECTION1_ID!;
-
-const client = new Client()
-    .setEndpoint('https://fra.cloud.appwrite.io/v1')
-    .setProject(process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID!);
-
-const database = new Databases(client);
+// UPDATED: Define type for movie details to allow poster_path, runtime, and overview to be null
+interface MovieDetailsData {
+    id: number;
+    title: string;
+    poster_path: string | null;
+    release_date: string;
+    runtime: number | null;
+    vote_average: number;
+    vote_count: number;
+    overview: string | null; // <--- CHANGED TO string | null
+    genres: { id: number; name: string }[];
+    budget: number;
+    revenue: number;
+    production_companies: { id: number; name: string }[];
+}
 
 const MovieDetails = () => {
     const { id, autoplay } = useLocalSearchParams<{ id: string; autoplay?: string }>();
     const scrollViewRef = useRef<ScrollView>(null);
     const trailerRef = useRef<View>(null);
-    const { user } = useAuth();
-    const { data: movie, loading } = useFetch(() => fetchMovieDetails(id as string));
+    const { user, token } = useAuth();
+    const { data: movie, loading } = useFetch<MovieDetailsData>(() => fetchMovieDetails(id as string));
     const [trailerKey, setTrailerKey] = useState<string | null>(null);
     const [isSaved, setIsSaved] = useState(false);
     const [savedDocId, setSavedDocId] = useState<string | null>(null);
@@ -43,29 +58,29 @@ const MovieDetails = () => {
 
     useEffect(() => {
         const fetchSavedStatus = async () => {
-            if (!user?.$id || !movie) return;
+            if (!user?._id || !token || !movie) {
+                setIsSaved(false);
+                setSavedDocId(null);
+                return;
+            }
+
             try {
-                const res = await database.listDocuments(
-                    DATABASE_ID,
-                    COLLECTION_ID,
-                    [
-                        Query.equal('movie_id', movie.id),
-                        Query.equal('user_id', user.$id)
-                    ]
-                );
-                if (res.total > 0) {
+                const savedMovies = await getSavedMovies(token);
+                const foundMovie = savedMovies.find((sm: any) => sm.movie_id === movie.id);
+                if (foundMovie) {
                     setIsSaved(true);
-                    setSavedDocId(res.documents[0].$id);
+                    setSavedDocId(foundMovie._id);
                 } else {
                     setIsSaved(false);
                     setSavedDocId(null);
                 }
             } catch (err) {
                 console.error('Error checking saved status:', err);
+                Alert.alert('Error', 'Failed to load saved status.');
             }
         };
         fetchSavedStatus();
-    }, [movie, user]);
+    }, [movie, user, token]);
 
     useEffect(() => {
         const fetchVideo = async () => {
@@ -98,57 +113,73 @@ const MovieDetails = () => {
             }
         };
         fetchVideo();
-    }, [id]);
+    }, [id, autoplay]);
 
     const handleToggleSave = async () => {
-        if (!movie || !user?.$id) return;
+        if (!movie || !user?._id || !token) {
+            Alert.alert('Login Required', 'Please log in to save movies.');
+            return;
+        }
+
         try {
             if (isSaved && savedDocId) {
-                await database.deleteDocument(DATABASE_ID, COLLECTION_ID, savedDocId);
+                await deleteSavedMovie(savedDocId, token);
                 setIsSaved(false);
                 setSavedDocId(null);
+                Alert.alert('Removed', `"${movie.title}" removed from your list.`);
             } else {
-                const res = await database.createDocument(DATABASE_ID, COLLECTION_ID, ID.unique(), {
-                    title: movie.title,
-                    poster_url: `https://image.tmdb.org/t/p/w500/${movie.poster_path}`,
-                    movie_id: movie.id,
-                    user_id: user.$id,
-                    searchTerm: '',
-                });
+                const savedDoc = await saveMovie(movie, token);
                 setIsSaved(true);
-                setSavedDocId(res.$id);
+                setSavedDocId(savedDoc._id);
+                Alert.alert('Saved', `"${movie.title}" added to your list!`);
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error('Toggle save error:', err);
+            Alert.alert('Error', err.message || 'Failed to save/remove movie.');
         }
     };
 
     const handleWatchMovie = async () => {
-        if (!movie?.title) return;
+        if (!movie?.title || !user?._id || !token) {
+            Alert.alert('Login Required', 'Please log in to watch full movies.');
+            return;
+        }
 
         try {
             setLoadingScrape(true);
-            const bestVideoId = await scrapeBestYouTubeId(`${movie.title} ${movie.release_date?.split('-')[0] || ''}`);
-            setLoadingScrape(false);
+
+            const year = movie.release_date?.split('-')[0] || '';
+            const searchQuery = `${movie.title} ${year} full movie`;
+
+            const bestVideoId = await scrapeBestYouTubeId(searchQuery, token);
 
             if (bestVideoId) {
-                await database.createDocument(DATABASE_ID, COLLECTION1_ID, ID.unique(), {
-                    user_id: user?.$id,
-                    movie_id: movie?.id,
-                    title: movie?.title,
-                    timestamp: new Date().toISOString(),
-                    poster_url: `https://image.tmdb.org/t/p/w500/${movie.poster_path}`,
-                });
+                await logSearchHistory(
+                    {
+                        movie_id: movie.id,
+                        title: movie.title,
+                        poster_url: movie.poster_path
+                            ? `https://image.tmdb.org/t/p/w500/${movie.poster_path}`
+                            : undefined,
+                    },
+                    token
+                );
 
-                router.push({ pathname: '/YouTubePlayer', params: { videoId: bestVideoId } });
+                router.push({
+                    pathname: '/YouTubePlayer',
+                    params: { videoId: bestVideoId },
+                });
             } else {
-                alert('No full movie found. Try again later.');
+                Alert.alert('Not Found', 'No full movie found on YouTube for this title.');
             }
-        } catch (e) {
+        } catch (e: any) {
             console.error('❌ Failed to scrape or route:', e);
+            Alert.alert('Error', e.message || 'Failed to find or play movie.');
+        } finally {
             setLoadingScrape(false);
         }
     };
+
 
     return (
         <View className="bg-primary flex-1">
@@ -157,6 +188,7 @@ const MovieDetails = () => {
                     <TouchableOpacity
                         onPress={handleToggleSave}
                         className="mb-3 self-end bg-dark-100 p-2 rounded-full"
+                        disabled={!user || !movie || !token}
                     >
                         {isSaved ? (
                             <Heart fill="#FF4D4D" color="#FF4D4D" />
@@ -192,12 +224,16 @@ const MovieDetails = () => {
 
                     <TouchableOpacity
                         onPress={handleWatchMovie}
-                        disabled={loadingScrape}
+                        disabled={loadingScrape || !user || !token || !movie}
                         className="bg-green-600 mt-4 py-2 px-4 rounded"
                     >
-                        <Text className="text-white text-center text-sm font-semibold">
-                            {loadingScrape ? '⏳ Searching Full Movie...' : '🍿 Watch Full Movie on YouTube'}
-                        </Text>
+                        {loadingScrape ? (
+                            <ActivityIndicator color="#fff" />
+                        ) : (
+                            <Text className="text-white text-center text-sm font-semibold">
+                                🍿 Watch Full Movie on YouTube
+                            </Text>
+                        )}
                     </TouchableOpacity>
 
                     <MovieInfo label="Overview" value={movie?.overview} />
@@ -256,7 +292,7 @@ const MovieDetails = () => {
                             </Pressable>
                         </View>
                     </View>
-                </View>
+                </View> {/* <--- THIS IS THE MISSING CLOSING TAG */}
             </Modal>
 
             <TouchableOpacity

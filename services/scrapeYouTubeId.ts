@@ -1,40 +1,35 @@
 import axios from 'axios';
-import cheerio from 'cheerio-without-node-native';
-import type { Element } from 'domhandler'; // 👈 FIXED type import
 
-export const scrapeBestYouTubeId = async (query: string): Promise<string | null> => {
+const BACKEND_URL = 'http://192.168.132.114:5000/api'; // Ensure this is correct
+
+// *** CRITICAL FIX: Add 'token' as a parameter to the function ***
+export const scrapeBestYouTubeId = async (query: string, token: string): Promise<string | null> => {
     try {
-        const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}+full+movie`;
-        const { data } = await axios.get(searchUrl);
+        const response = await axios.post(
+            `${BACKEND_URL}/search/scrape-youtube`, // Ensure this URL is correct as per your backend routes
+            { query },
+            { // *** CRITICAL FIX: Add headers with Authorization token ***
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`, // Send the authentication token here
+                },
+            }
+        );
 
-        const $ = cheerio.load(data);
+        // ... (rest of the logic for handling response.data)
+        if (response.data && response.data.videoId) {
+            return response.data.videoId;
+        } else {
+            console.warn('Backend found no suitable YouTube video for query:', query, response.data.message);
+            throw new Error(response.data.message || 'No suitable full movie found on YouTube for the given query.');
+        }
 
-        const initialDataScript = $('script')
-            .filter(function (this: Element, _i: number, _el: Element): boolean {
-                const content = $(this).html();
-                return !!content && content.includes('var ytInitialData');
-            })
-            .first()
-            .html();
-
-        if (!initialDataScript) return null;
-
-        const jsonText = initialDataScript.split(' = ')[1]?.replace(/;$/, '');
-        if (!jsonText) return null;
-
-        const ytData = JSON.parse(jsonText);
-
-        const contents = ytData?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents;
-
-        const firstVideoRenderer = contents?.flatMap((section: any) =>
-            section?.itemSectionRenderer?.contents || []
-        ).find((item: any) => item?.videoRenderer);
-
-        const videoId = firstVideoRenderer?.videoRenderer?.videoId;
-
-        return videoId || null;
-    } catch (error) {
-        console.error('❌ YouTube scraping failed:', error);
-        return null;
+    } catch (error: any) {
+        console.error('Error in scrapeBestYouTubeId service:', error);
+        if (axios.isAxiosError(error) && error.response) {
+            // This is where the backend's "Not authorized, token missing" message will be caught
+            throw new Error(error.response.data.message || 'YouTube scraping failed on backend.');
+        }
+        throw new Error('Network error or unexpected issue during YouTube scraping.');
     }
 };

@@ -2,12 +2,42 @@ import { Image, View, FlatList, Text, ActivityIndicator } from "react-native";
 import { images } from "@/constants/images";
 import MovieCard from "@/components/MovieCard";
 import useFetch from "@/services/useFetch";
-import { fetchMovies } from "@/services/api";
+import { fetchMovies } from "@/services/api"; // This should hit your movie search API (e.g., TMDB)
 import { icons } from "@/constants/icons";
 import SearchBar from "@/components/SearchBar";
 import { useEffect, useState } from "react";
-import { updateSearchCount } from "@/services/appwrite";
+// import { updateSearchCount } from "@/services/appwrite"; // REMOVE THIS
 import { useAuth } from '@/context/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // Needed for token
+
+const API_BASE_URL = 'http://192.168.132.114:5000/api'; // Your backend URL
+
+// Function to log search activity to your backend
+const logSearchActivity = async (userId: string, token: string, searchTerm: string, movie?: any) => {
+    try {
+        const response = await fetch(`${API_BASE_URL}/user/search-log`, { // Your new backend endpoint
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+                searchTerm,
+                movie_id: movie?.id, // Assuming movie has an 'id'
+                movie_title: movie?.title,
+                movie_poster: movie?.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : undefined,
+            }),
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Failed to log search activity:', response.status, errorText);
+        }
+    } catch (error) {
+        console.error('Network error logging search activity:', error);
+    }
+};
+
 
 const Search = () => {
     const { user } = useAuth();
@@ -40,7 +70,7 @@ const Search = () => {
         );
     }
 
-    // Search logic
+    // Search logic: debounce for API calls
     useEffect(() => {
         const timeoutId = setTimeout(async () => {
             if (searchQuery.trim()) {
@@ -53,11 +83,18 @@ const Search = () => {
         return () => clearTimeout(timeoutId);
     }, [searchQuery]);
 
+    // Log search count to your backend after movies are loaded
     useEffect(() => {
-        if (movies?.length > 0 && movies?.[0]) {
-            updateSearchCount(searchQuery, movies[0]);
-        }
-    }, [movies]);
+        const handleSearchLog = async () => {
+            if (user?.id && movies?.length > 0 && movies?.[0]) { // Use user.id
+                const token = await AsyncStorage.getItem('userToken');
+                if (token) {
+                    await logSearchActivity(user.id, token, searchQuery, movies[0]);
+                }
+            }
+        };
+        handleSearchLog();
+    }, [movies, user, searchQuery]); // Depend on movies, user, and searchQuery
 
     return (
         <View className="flex-1 bg-primary">
@@ -66,7 +103,7 @@ const Search = () => {
             <FlatList
                 data={movies}
                 renderItem={({ item }) => <MovieCard {...item} />}
-                keyExtractor={(item) => `search-${item.id}`}
+                keyExtractor={(item) => `search-${item.id}`} // Assuming TMDB movie id
                 className="px-5"
                 numColumns={3}
                 columnWrapperStyle={{

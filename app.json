@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Rolamax",
+    "name": "Rolaflex",
     "slug": "mobile_movie_app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -19,7 +19,7 @@
     "ios": {
       "bundleIdentifier": "com.yourcompany.rolamax",
       "associatedDomains": [
-        "applinks:rolamax.app"
+        "applinks:rolaflex.app"
       ],
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to upload profile images.",
@@ -34,7 +34,7 @@
           "data": [
             {
               "scheme": "https",
-              "host": "rolamax.app"
+              "host": "rolaflex.app"
             },
             {
               "scheme": "Rola_movies"
@@ -57,7 +57,7 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.rolandroid.rolamax"
+      "package": "com.rolandroid.rolaflex"
     },
     "web": {
       "bundler": "metro",

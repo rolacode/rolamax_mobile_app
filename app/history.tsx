@@ -8,51 +8,48 @@ import {
     ActivityIndicator,
     Alert,
 } from 'react-native';
-import { useAuth } from '@/context/AuthContext';
-import { Client, Databases, ID, Models, Query } from 'react-native-appwrite';
+import { useAuth } from '@/context/AuthContext'; // Assumed to provide user (with _id) and token
 import * as Linking from 'expo-linking';
 
-const client = new Client()
-    .setEndpoint('https://fra.cloud.appwrite.io/v1')
-    .setProject(process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID!);
+// IMPORT YOUR NEW BACKEND SERVICE FUNCTIONS
+import {
+    getWatchHistory,
+    deleteWatchHistoryItem,
+    clearAllWatchHistory,
+} from '@/services/searchHistoryService'; // Path to the new service file
 
-const database = new Databases(client);
-const DATABASE_ID = process.env.EXPO_PUBLIC_APPWRITE_DATABASE_ID!;
-const COLLECTION1_ID = process.env.EXPO_PUBLIC_APPWRITE_COLLECTION1_ID!;
-
-type ClickDoc = Models.Document & {
+// Define the type for history items from your MongoDB backend
+type HistoryDoc = {
+    _id: string; // MongoDB's default ID
     title: string;
-    user_id: string;
+    user: string; // User's MongoDB _id
     movie_id: number;
-    timestamp: string;
+    timestamp: string; // ISO string date
     poster_url?: string;
+    // Add other fields from your SearchLog model
 };
 
 type GroupedSection = {
     title: string;
-    data: ClickDoc[];
+    data: HistoryDoc[];
 };
 
-function groupClicks(clicks: ClickDoc[]): GroupedSection[] {
+function groupClicks(clicks: HistoryDoc[]): GroupedSection[] {
     const today = new Date();
     const yesterday = new Date();
     yesterday.setDate(today.getDate() - 1);
 
     const grouped = {
-        Today: [] as ClickDoc[],
-        Yesterday: [] as ClickDoc[],
-        Earlier: [] as ClickDoc[],
+        Today: [] as HistoryDoc[],
+        Yesterday: [] as HistoryDoc[],
+        Earlier: [] as HistoryDoc[],
     };
 
     for (const click of clicks) {
         const ts = new Date(click.timestamp);
-        if (
-            ts.toDateString() === today.toDateString()
-        ) {
+        if (ts.toDateString() === today.toDateString()) {
             grouped.Today.push(click);
-        } else if (
-            ts.toDateString() === yesterday.toDateString()
-        ) {
+        } else if (ts.toDateString() === yesterday.toDateString()) {
             grouped.Yesterday.push(click);
         } else {
             grouped.Earlier.push(click);
@@ -61,29 +58,28 @@ function groupClicks(clicks: ClickDoc[]): GroupedSection[] {
 
     return Object.entries(grouped)
         .filter(([_, data]) => data.length > 0)
-        .map(([title, data]) => ({ title, data }));
+        .map(([title, data]) => ({ title, data: data.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()) })); // Sort within groups by newest
 }
 
 const WatchHistory = () => {
-    const { user } = useAuth();
-    const [clicks, setClicks] = useState<ClickDoc[]>([]);
+    const { user, token } = useAuth(); // Assuming useAuth provides user (with _id) and token
+    const [clicks, setClicks] = useState<HistoryDoc[]>([]);
     const [loading, setLoading] = useState(true);
 
     const fetchClicks = async () => {
-        if (!user?.$id) return;
+        // Ensure user and token are available
+        if (!user?._id || !token) {
+            setLoading(false);
+            setClicks([]); // Clear history if not logged in
+            return;
+        }
         try {
-            const res = await database.listDocuments<ClickDoc>(
-                DATABASE_ID,
-                COLLECTION1_ID,
-                [
-                    Query.equal('user_id', user.$id),
-                    Query.orderDesc('timestamp'),
-                ]
-            );
-            setClicks(res.documents);
-
+            const historyData = await getWatchHistory(token);
+            setClicks(historyData);
         } catch (err) {
             console.error('Error loading watch history:', err);
+            Alert.alert('Error', 'Failed to load watch history.');
+            setClicks([]);
         } finally {
             setLoading(false);
         }
@@ -91,19 +87,27 @@ const WatchHistory = () => {
 
     useEffect(() => {
         fetchClicks();
-    }, [user]);
+    }, [user, token]); // Add token to dependency array
 
     const deleteClick = async (id: string) => {
+        if (!token) {
+            Alert.alert('Error', 'Not authenticated.');
+            return;
+        }
         try {
-            await database.deleteDocument(DATABASE_ID, COLLECTION1_ID, id);
-            setClicks(prev => prev.filter(c => c.$id !== id));
+            await deleteWatchHistoryItem(id, token); // Use MongoDB _id for deletion
+            setClicks(prev => prev.filter(c => c._id !== id)); // Filter by MongoDB _id
         } catch (e) {
+            console.error('Error deleting item:', e);
             Alert.alert('Error', 'Failed to delete item');
         }
     };
 
     const clearAllClicks = async () => {
-        if (!user?.$id) return;
+        if (!user?._id || !token) {
+            Alert.alert('Error', 'Not authenticated.');
+            return;
+        }
 
         Alert.alert('Confirm', 'Are you sure you want to delete all watch history?', [
             {
@@ -115,34 +119,26 @@ const WatchHistory = () => {
                 style: 'destructive',
                 onPress: async () => {
                     try {
-                        const res = await database.listDocuments<ClickDoc>(
-                            DATABASE_ID,
-                            COLLECTION1_ID,
-                            [Query.equal('user_id', user.$id)]
-                        );
-
-                        const deletions = res.documents.map(doc =>
-                            database.deleteDocument(DATABASE_ID, COLLECTION1_ID, doc.$id)
-                        );
-
-                        await Promise.all(deletions);
+                        await clearAllWatchHistory(token);
                         setClicks([]); // update state
+                        Alert.alert('Success', 'All watch history cleared!');
                     } catch (e) {
-                        Alert.alert('Error', 'Failed to delete all items');
+                        console.error('Error clearing all items:', e);
+                        Alert.alert('Error', 'Failed to clear all items');
                     }
                 },
             },
         ]);
     };
 
-
+    // Fix: Corrected template literal syntax
     const openYouTubeSearch = (title: string) => {
         const query = encodeURIComponent(`${title} full movie`);
-        const url = `https://www.youtube.com/results?search_query=${query}`;
-        Linking.openURL(url);
+        const url = `http://googleusercontent.com/youtube.com/${query}`; // <--- FIXED SYNTAX
+        Linking.openURL(url).catch(err => console.error('Failed to open URL:', err));
     };
 
-    const renderItem = ({ item }: { item: ClickDoc }) => (
+    const renderItem = ({ item }: { item: HistoryDoc }) => (
         <View className="flex-row items-center gap-3 p-3 bg-dark-100 rounded-lg mb-2 mx-4">
             <TouchableOpacity onPress={() => openYouTubeSearch(item.title)} className="flex-1">
                 <View className="flex-row gap-3">
@@ -158,7 +154,7 @@ const WatchHistory = () => {
                 </View>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => deleteClick(item.$id)}>
+            <TouchableOpacity onPress={() => deleteClick(item._id)}> {/* Use item._id */}
                 <Text className="text-red-400 font-bold">Delete</Text>
             </TouchableOpacity>
         </View>
@@ -174,18 +170,20 @@ const WatchHistory = () => {
             )}
 
             {loading ? (
-                <ActivityIndicator color="#fff" size="large" />
+                <ActivityIndicator color="#fff" size="large" className="mt-10" />
+            ) : (clicks.length === 0 ? (
+                <Text className="text-white text-center mt-10">No watch history yet.</Text>
             ) : (
                 <SectionList
                     sections={groupClicks(clicks)}
-                    keyExtractor={(item) => item.$id}
+                    keyExtractor={(item) => item._id} // Use MongoDB _id
                     renderItem={renderItem}
                     renderSectionHeader={({ section: { title } }) => (
                         <Text className="text-light-100 font-bold text-lg mx-4 mt-4 mb-2">{title}</Text>
                     )}
                     ListEmptyComponent={<Text className="text-white text-center mt-10">No watch history yet.</Text>}
                 />
-            )}
+            ))}
         </View>
     );
 };

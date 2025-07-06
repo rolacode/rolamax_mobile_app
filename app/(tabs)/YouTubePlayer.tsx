@@ -23,6 +23,7 @@ export default function YouTubePlayerScreen() {
             >
                 <Text className="text-white text-sm">⬅ Back</Text>
             </TouchableOpacity>
+
             <YoutubePlayerComponent videoId={videoId} />
         </View>
     );
